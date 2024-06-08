@@ -1,3 +1,5 @@
+import random
+
 class Agent:
     def __init__(self, start_position):
         self.position = start_position
@@ -5,6 +7,9 @@ class Agent:
         self.arrows = 3
         self.dead = False
         self.has_gold = False
+        self.visited = set()
+        self.remembered_danger = set()
+        self.wumpus_killed = False
         self.previous_states = []
 
     def save_state(self):
@@ -29,13 +34,10 @@ class Agent:
         
         # Check if agent is in the same position as the Wumpus
         if 'Wumpus' in world.grid[self.position[0]][self.position[1]]:
-            choice = input("Wumpus에게 죽었습니다 끝내신다면 (yes) 직전으로 돌아갈거면 (no)? ")
-            if choice.lower() == 'yes':
-                self.dead = True
-                return True
-            else:
-                self.revert_state()
-                return False
+            print("Wumpus에게 죽었습니다.")
+            self.dead = True
+            self.remembered_danger.add(self.position)
+            return True
         return self.dead
 
     def move_forward(self, world):
@@ -51,6 +53,7 @@ class Agent:
 
         if world.is_valid_position(new_position):
             self.position = new_position
+            self.visited.add(self.position)
         else:
             print("벽과 충돌")
 
@@ -73,8 +76,8 @@ class Agent:
     def shoot(self, world):
         if self.arrows > 0:
             self.arrows -= 1
-            print("화살발사!!")
-            # wumpus랑 마주보고 있는가?
+            print("화살 발사!!")
+            # wumpus와 마주보고 있는가?
             if self.direction == 'North':
                 wumpus_position = (self.position[0] + 1, self.position[1])
             elif self.direction == 'East':
@@ -84,20 +87,20 @@ class Agent:
             elif self.direction == 'West':
                 wumpus_position = (self.position[0], self.position[1] - 1)
             
-            if 'Wumpus' in world.grid[wumpus_position[0]][wumpus_position[1]]:
-                print("WUMPUS사냥 성공!!")
+            if world.is_valid_position(wumpus_position) and 'Wumpus' in world.grid[wumpus_position[0]][wumpus_position[1]]:
+                print("WUMPUS 사냥 성공!!")
                 world.grid[wumpus_position[0]][wumpus_position[1]].remove('Wumpus')
+                self.wumpus_killed = True
         else:
-            print("화살없음 --> 다 썻음")
-
+            print("화살 없음 --> 다 썼음")
 
     def climb(self):
         if self.position == (0, 0):
             if self.has_gold:
-                print("금과 함께 탈출성공!")
+                print("금과 함께 탈출 성공!")
                 self.dead = True
             else:
-                print("금없이 탈출하셧네요...")
+                print("금 없이 탈출하셨네요...")
                 self.dead = True
         else:
             print("여기서는 탈출이 안됩니다.")
@@ -105,3 +108,83 @@ class Agent:
     def revert_state(self):
         if self.previous_states:
             self.position, self.direction, self.arrows, self.dead, self.has_gold = self.previous_states.pop()
+
+    def get_next_position(self):
+        if self.direction == 'North':
+            return (self.position[0] + 1, self.position[1])
+        elif self.direction == 'East':
+            return (self.position[0], self.position[1] + 1)
+        elif self.direction == 'South':
+            return (self.position[0] - 1, self.position[1])
+        elif self.direction == 'West':
+            return (self.position[0], self.position[1] - 1)
+
+    def decide_next_action(self, world):
+        # If agent has gold, return to the start position to climb
+        if self.has_gold:
+            return self.return_to_start()
+
+        current_cell = world.grid[self.position[0]][self.position[1]]
+
+        adjacent_cells = [
+            (self.position[0] + 1, self.position[1]),
+            (self.position[0] - 1, self.position[1]),
+            (self.position[0], self.position[1] + 1),
+            (self.position[0], self.position[1] - 1)
+        ]
+
+        # Check if gold is in the current cell
+        if 'Glitter' in current_cell:
+            return 'Grab'
+
+        # Check adjacent cells for Wumpus or Pit
+        for cell in adjacent_cells:
+            if world.is_valid_position(cell):
+                if 'Wumpus' in world.grid[cell[0]][cell[1]]:
+                    if self.arrows > 0 and cell == self.get_next_position():
+                        return 'Shoot'
+                    else:
+                        continue  # Skip shooting if no arrows left or no Wumpus in the next position
+                if 'Pit' in world.grid[cell[0]][cell[1]]:
+                    continue  # Skip dangerous cell
+
+        # Move to the next unvisited cell, avoiding Pit
+        for cell in adjacent_cells:
+            if world.is_valid_position(cell) and cell not in self.visited and cell not in self.remembered_danger:
+                if cell == (self.position[0] + 1, self.position[1]):
+                    self.direction = 'North'
+                elif cell == (self.position[0], self.position[1] + 1):
+                    self.direction = 'East'
+                elif cell == (self.position[0] - 1, self.position[1]):
+                    self.direction = 'South'
+                elif cell == (self.position[0], self.position[1] - 1):
+                    self.direction = 'West'
+                return 'GoForward'
+
+        # Try to move to a visited cell if no unvisited cell is found
+        for cell in adjacent_cells:
+            if world.is_valid_position(cell) and cell not in self.remembered_danger:
+                if cell == (self.position[0] + 1, self.position[1]):
+                    self.direction = 'North'
+                elif cell == (self.position[0], self.position[1] + 1):
+                    self.direction = 'East'
+                elif cell == (self.position[0] - 1, self.position[1]):
+                    self.direction = 'South'
+                elif cell == (self.position[0], self.position[1] - 1):
+                    self.direction = 'West'
+                return 'GoForward'
+
+        # If no valid move is found, turn to explore new directions
+        return random.choice(['TurnLeft', 'TurnRight'])
+
+    def return_to_start(self):
+        if self.position == (0, 0):
+            return 'Climb'  # Already at the start position, climb
+        else:
+            # Move back to the start position
+            if self.position[0] > 0:
+                self.direction = 'South'
+            elif self.position[1] > 0:
+                self.direction = 'West'
+            return 'GoForward'
+
