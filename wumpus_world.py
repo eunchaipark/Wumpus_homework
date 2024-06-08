@@ -1,4 +1,5 @@
 import random
+import copy
 
 class WumpusWorld:
     def __init__(self, size=4):
