@@ -11,11 +11,14 @@ def main():
         previous_agent_state = (agent.position, agent.direction, agent.arrows, agent.dead, agent.has_gold)
 
         world.display_grid(agent.position, agent.direction)
-        agent.display_status()  # 에이전트의 상태를 출력합니다.
-        
-        agent.save_state()  # 에이전트의 상태를 저장합니다.
-        
-        action = input("Enter action (GoForward/TurnLeft/TurnRight/Grab/Shoot/Climb): ")
+        agent.display_status()
+
+        agent.save_state()
+
+        # Decide next action automatically
+        action = agent.decide_next_action(world)
+        print(f"Selected action: {action}")
+
         agent_dead = agent.execute_action(action, world)
 
         if agent_dead:
@@ -25,9 +28,15 @@ def main():
                 print("게임을 종료합니다.")
                 break
             else:
-                print("이전 상태로 돌아갑니다.")
-                world = previous_world
-                agent.position, agent.direction, agent.arrows, agent.dead, agent.has_gold = previous_agent_state
+                print("에이전트가 시작 위치로 돌아갑니다.")
+                agent.position = (0, 0)
+                agent.direction = 'East'
+                agent.dead = False
+                agent.visited = set()
+                agent.visited.add((0, 0))
+                # Remember the dangers discovered so far
+                agent.remembered_danger.add(agent.position)
+                world = previous_world  # 게임 맵도 초기 상태로 돌아감
 
 if __name__ == "__main__":
     main()
